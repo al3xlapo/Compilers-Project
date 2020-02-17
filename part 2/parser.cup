@@ -1,0 +1,161 @@
+/**
+ *  Package and Import Specifications
+ */
+import java_cup.runtime.*;
+
+/**
+ *  Usercode Components
+ */
+parser code {:
+    Scanner s;
+    Parser(Scanner s){ this.s=s; }
+:}
+
+/* define how to connect to the scanner! */
+scan with {: return s.next_token(); :};
+
+/**
+ *  Symbol Lists
+ */
+
+/* Terminals (tokens returned by the scanner). */
+terminal           CONCAT, LPAREN, RPAREN, LBRACE, RBRACE, EQUAL, IN, COMMA, IF, ELSE;
+terminal String    STRING_LITERAL, string_identifier;        // our scanner provides numbers as integers
+
+/*  Non terminals */
+non terminal           p;
+non terminal String    defs, calls, def, id, args, args2, arg, block, exp, lit, call, pars, pars2, par, stmt, exps, exps2, cond, callIns, parIns, parsIns, pars2Ins,
+		  	 parP, parPIns;
+
+
+/**
+ *  Precedence Declarations
+ */
+precedence left EQUAL;
+precedence left CONCAT;
+
+/**
+ *  The Grammar Rules
+ */
+
+/* program p */
+p ::= defs:d calls:c  	{: System.out.printf("public class Main {\n\n%s%s\n}", d, c); :}  
+; 							
+
+/* function definitions */
+defs ::= def:d defs:dr			{: RESULT = "\tpublic static String " + d + "\n\n" + dr; :}
+      |	call:c				{: RESULT = "\n\tpublic static void main(String[] args) {\n\t\tSystem.out.println(" + c + ");\n" +
+					   "\t"; :}			
+;
+
+/*they consist of their identifier, arguments and block(or function body) */
+def ::= id:i LPAREN args:a block:b	{: RESULT = i + "(" + a + b; :}
+;
+
+/* calls outside of a funtion body, the ones printed inside main */
+calls ::= call:c calls:cs 		{: RESULT = "\tSystem.out.println(" + c + ");\n\t" + cs; :}
+      |					{: RESULT = "\n\t}"; :}
+;
+
+call ::= id:i LPAREN pars:p		{: RESULT = i + "(" + p; :}		
+;
+
+/* for calls inside a body , parameters can be identifiers too, so I distinguish toplevel calls and callsInside along with the rest of the NT's they're using */
+
+callIns ::= id:i LPAREN parsIns:p		{: RESULT = i + "(" + p; :}		
+;
+
+parsIns ::= parIns:p parPIns:p2 pars2Ins:p3		{: RESULT = p + p2 + p3; :}
+       | RPAREN					{: RESULT = ")"; :}
+;
+
+pars2Ins ::= COMMA parIns:p parPIns:p2 pars2Ins:p3		{: RESULT = ", " + p + p2 + p3; :}
+        | RPAREN 						{: RESULT = ")"; :}
+;
+
+/* parPIns is for concatenation of parsIns as an argument of callIns, same goes for parP later, but for top-level calls */
+parPIns ::= CONCAT par:p parP:p2		{: RESULT= " + " + p + p2; :}
+       | 					{: RESULT =""; :}
+;
+
+parIns ::= exp:e			{: RESULT = e; :}
+;
+
+
+id ::= string_identifier:sid		{: RESULT = sid; :}
+;
+
+/* arguments of a definition */
+args ::= arg:a args2:a2			{: RESULT = "String " + a + a2;  :}   
+	| RPAREN			{: RESULT = ")"; :}
+;
+
+args2 ::= COMMA arg:a args2:a2		{: RESULT = ", " + "String " + a + a2; :} 
+        | RPAREN			{: RESULT = ")"; :}  
+;
+
+arg ::= id:i				{: RESULT = i; :}
+;
+
+/*block-body of a definition-function*/
+block ::= LBRACE exps:e RBRACE	{: RESULT = "{\n\t\treturn " + e + ";\n\t}"; :}
+;
+
+/*expressions inside a function body */
+
+exps ::= exp:e exps2:es					{: RESULT = e + es; :}
+       | LPAREN exp:e exps2:e2 RPAREN exps2:e3		{: RESULT = "(" + e + e2 + ")" + e3; :}
+       | 						{: RESULT = ";\n}\n\n"; :}
+;
+
+exps2 ::= CONCAT exp:e exps2:e2					{: RESULT = " + " + e + e2; :}
+	| CONCAT LPAREN exp:e exps2:e2 RPAREN exps2:e3	{: RESULT = " + " + "(" + e + e2 + ")" + e3; :} 
+	|						{: RESULT = ""; :}
+;																																																																																																																																																																																																																																																																																																																																																																																	
+
+
+/*the whole body of the definition is an expression */
+/* an expression can be a literal, a callIns(call located inside a function body), an identifier, a statement(if-else) or a concatenation of these*/
+exp ::= lit:l				{: RESULT = l; :}
+      | callIns:c			{: RESULT = c; :}
+      | id:i				{: RESULT = i; :}
+      | stmt:s				{: RESULT = s; :}
+;
+
+
+lit ::= STRING_LITERAL:s		{: RESULT = "\"" + s + "\""; :}
+;
+
+
+/* parameters of a call */																																																		
+pars ::= par:p parP:p2 pars2:p3	{: RESULT = p + p2 + p3; :}
+       | RPAREN			{: RESULT = ")"; :}
+;
+
+pars2 ::= COMMA par:p parP:p2 pars2:p3	{: RESULT = ", " + p + p2 + p3; :}
+        | RPAREN 		{: RESULT = ")"; :}
+;
+
+
+parP ::= CONCAT par:p parP:p2	{: RESULT= " + " + p + p2; :}
+       | 			{: RESULT =""; :}
+;
+
+par ::= call:c			{: RESULT = c; :}
+      | lit:l			{: RESULT = l; :}
+      | stmt:s			{: RESULT = s; :}
+; 
+
+
+/*if-else statement */
+stmt ::= IF cond:c exps:e ELSE exps:e2 		{: RESULT = c + " ? { " + e + " } : { " + e2 + " }"; :}
+;
+
+cond ::= LPAREN exps:e EQUAL exps:e2 RPAREN		{: RESULT = "(" + e + ".equals(" + e2 + ")" + ")"; :}
+       | LPAREN exps:e IN exps:e2 RPAREN 		{: RESULT = "(" + e2 + ".contains(" + e + ")" + ")"; :}
+;
+
+
+/**/
+
+
